@@ -14,32 +14,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.keycloak.social.wechat;
+package org.keycloak.social.wework;
 
 import org.keycloak.broker.provider.AbstractIdentityProviderFactory;
 import org.keycloak.broker.social.SocialIdentityProviderFactory;
 import org.keycloak.models.IdentityProviderModel;
 import org.keycloak.models.KeycloakSession;
 
-public class WechatWorkIdentityProviderFactory
-    extends AbstractIdentityProviderFactory<WechatWorkIdentityProvider>
-    implements SocialIdentityProviderFactory<WechatWorkIdentityProvider> {
+public class WeWorkIdentityProviderFactory
+    extends AbstractIdentityProviderFactory<WeWorkIdentityProvider>
+    implements SocialIdentityProviderFactory<WeWorkIdentityProvider> {
 
-  public static final String PROVIDER_ID = "wechat-work";
+  public static final String PROVIDER_ID = "wework";
 
   @Override
   public String getName() {
-    return "WechatWork";
+    return "Wechat Work";
   }
 
   @Override
-  public WechatWorkIdentityProvider create(KeycloakSession session, IdentityProviderModel model) {
-    return new WechatWorkIdentityProvider(session, new WechatWorkProviderConfig(model));
+  public WeWorkIdentityProvider create(KeycloakSession session, IdentityProviderModel model) {
+    return new WeWorkIdentityProvider(session, new WeWorkIdentityProviderConfig(model));
   }
 
   @Override
-  public IdentityProviderModel createConfig() {
-    return new WechatWorkProviderConfig();
+  public WeWorkIdentityProviderConfig createConfig() {
+    return new WeWorkIdentityProviderConfig();
   }
 
   @Override
