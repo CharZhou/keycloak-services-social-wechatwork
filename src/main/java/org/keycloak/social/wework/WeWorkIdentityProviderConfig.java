@@ -18,6 +18,7 @@ package org.keycloak.social.wework;
 
 import org.keycloak.broker.oidc.OAuth2IdentityProviderConfig;
 import org.keycloak.models.IdentityProviderModel;
+import org.keycloak.models.RealmModel;
 
 public class WeWorkIdentityProviderConfig extends OAuth2IdentityProviderConfig {
 
@@ -27,11 +28,60 @@ public class WeWorkIdentityProviderConfig extends OAuth2IdentityProviderConfig {
 
   public WeWorkIdentityProviderConfig() {}
 
-  public String getAgentId() {
-    return getConfig().get("agentId");
+  @Override
+  public String getAuthorizationUrl() {
+    return "https://open.weixin.qq.com/connect/oauth2/authorize";
   }
 
-  public void setAgentId(String agentId) {
-    getConfig().put("agentId", agentId);
+  @Override
+  public String getTokenUrl() {
+    return "https://qyapi.weixin.qq.com/cgi-bin/user/getuserinfo";
+  }
+
+  @Override
+  public String getUserInfoUrl() {
+    return "https://qyapi.weixin.qq.com/cgi-bin/auth/getuserdetail";
+  }
+
+  public String getAgentId() {
+    String clientId = getClientId();
+    if (clientId == null) {
+      return null;
+    }
+    String[] parts = clientId.split(":");
+    if (parts.length != 2) {
+      return null;
+    }
+    return parts[1];
+  }
+
+  public String getCorpSecret() {
+    return getClientSecret();
+  }
+
+  public String getCorpId() {
+    String clientId = getClientId();
+    if (clientId == null) {
+      return null;
+    }
+    String[] parts = clientId.split(":");
+    if (parts.length != 2) {
+      return null;
+    }
+    return parts[0];
+  }
+
+  @Override
+  public void validate(RealmModel realm) {
+    super.validate(realm);
+    if (getCorpId() == null) {
+      throw new RuntimeException("Corp ID not configured");
+    }
+    if (getCorpSecret() == null) {
+      throw new RuntimeException("Corp Secret not configured");
+    }
+    if (getAgentId() == null) {
+      throw new RuntimeException("Agent ID not configured");
+    }
   }
 }

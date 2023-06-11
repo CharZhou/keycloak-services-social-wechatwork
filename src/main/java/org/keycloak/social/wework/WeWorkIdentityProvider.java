@@ -57,10 +57,6 @@ public class WeWorkIdentityProvider
     implements SocialIdentityProvider<WeWorkIdentityProviderConfig> {
   static final String ACCESS_TOKEN_CACHE_KEY = "wechat_work_agent_access_token";
   static final String AGENT_ACCESS_TOKEN_URL = "https://qyapi.weixin.qq.com/cgi-bin/gettoken";
-  static final String WEWORK_AUTH_URL = "https://open.weixin.qq.com/connect/oauth2/authorize";
-  static final String TOKEN_URL = "https://qyapi.weixin.qq.com/cgi-bin/auth/getuserinfo";
-  static final String USER_INFO_URL = "https://qyapi.weixin.qq.com/cgi-bin/auth/getuserdetail";
-  static final String DEFAULT_SCOPE = "snsapi_privateinfo";
   static final String USER_TICKET = "user_ticket";
   static final String CORP_ID = "corpid";
   static final String CORP_SECRET = "corpsecret";
@@ -89,7 +85,7 @@ public class WeWorkIdentityProvider
 
   private Cache<String, String> getCache() {
     return caches.computeIfAbsent(
-        getConfig().getClientId() + ":" + getConfig().getAgentId(),
+        getConfig().getCorpId() + ":" + getConfig().getAgentId(),
         WeWorkIdentityProvider::createCache);
   }
 
@@ -106,8 +102,8 @@ public class WeWorkIdentityProvider
     try {
       data =
           SimpleHttp.doGet(AGENT_ACCESS_TOKEN_URL, session)
-              .param(CORP_ID, getConfig().getClientId())
-              .param(CORP_SECRET, getConfig().getClientSecret())
+              .param(CORP_ID, getConfig().getCorpId())
+              .param(CORP_SECRET, getConfig().getCorpSecret())
               .asJson();
     } catch (Exception e) {
       throw new IdentityBrokerException("Failed to renew access token", e);
@@ -133,9 +129,6 @@ public class WeWorkIdentityProvider
 
   public WeWorkIdentityProvider(KeycloakSession session, WeWorkIdentityProviderConfig config) {
     super(session, config);
-    config.setAuthorizationUrl(WEWORK_AUTH_URL);
-    config.setTokenUrl(TOKEN_URL);
-    config.setUserInfoUrl(USER_INFO_URL);
   }
 
   @Override
@@ -151,15 +144,32 @@ public class WeWorkIdentityProvider
   protected BrokeredIdentityContext doGetFederatedIdentity(String accessToken) {
     BrokeredIdentityContext user;
     try {
-      JsonNode data = buildUserInfoRequest(accessToken, getConfig().getUserInfoUrl()).asJson();
-      //      logger.info("doGetFederatedIdentity data: " + data.toString());
-      int errorCode = data.get(ERROR_CODE).asInt();
-      String errorMsg = data.get(ERROR_MESSAGE).asText();
+      ObjectNode requestData = mapper.createObjectNode();
+      requestData.put(USER_TICKET, accessToken);
+
+      String uri =
+          UriBuilder.fromUri(getConfig().getUserInfoUrl())
+              .queryParam(ACCESS_TOKEN, getAccessToken())
+              .build()
+              .toString();
+      JsonNode userInfoResponse = SimpleHttp.doPost(uri, session).json(requestData).asJson();
+
+      int errorCode = userInfoResponse.get(ERROR_CODE).asInt();
+      String errorMsg = userInfoResponse.get(ERROR_MESSAGE).asText();
       if (errorCode != 0) {
         throw new IdentityBrokerException(errorMsg);
       }
 
-      user = extractIdentityFromProfile(null, data);
+      String userId = getJsonProperty(userInfoResponse, USER_ID);
+      String email = getJsonProperty(userInfoResponse, EMAIL);
+
+      user = new BrokeredIdentityContext(userId);
+
+      user.setUsername(userId);
+      user.setEmail(email);
+
+      AbstractJsonUserAttributeMapper.storeUserProfileForMapper(
+          user, userInfoResponse, getConfig().getAlias());
     } catch (Exception e) {
       throw new IdentityBrokerException("Failed to get federated identity", e);
     }
@@ -167,51 +177,11 @@ public class WeWorkIdentityProvider
   }
 
   @Override
-  protected boolean supportsExternalExchange() {
-    return true;
-  }
-
-  @Override
-  protected String getProfileEndpointForValidation(EventBuilder event) {
-    return USER_INFO_URL;
-  }
-
-  @Override
-  protected BrokeredIdentityContext extractIdentityFromProfile(EventBuilder event, JsonNode node) {
-    String userId = getJsonProperty(node, USER_ID);
-    String email = getJsonProperty(node, EMAIL);
-
-    BrokeredIdentityContext user = new BrokeredIdentityContext(userId);
-
-    user.setUsername(userId);
-    user.setEmail(email);
-
-    user.setIdpConfig(getConfig());
-    user.setIdp(this);
-
-    AbstractJsonUserAttributeMapper.storeUserProfileForMapper(user, node, getConfig().getAlias());
-    return user;
-  }
-
-  @Override
-  protected SimpleHttp buildUserInfoRequest(String subjectToken, String userInfoUrl) {
-    ObjectNode node = mapper.createObjectNode();
-    node.put(USER_TICKET, subjectToken);
-
-    String uri =
-        UriBuilder.fromUri(userInfoUrl)
-            .queryParam(ACCESS_TOKEN, getAccessToken())
-            .build()
-            .toString();
-    return SimpleHttp.doPost(uri, session).json(node);
-  }
-
-  @Override
   protected UriBuilder createAuthorizationUrl(AuthenticationRequest request) {
     UriBuilder uriBuilder = super.createAuthorizationUrl(request);
 
     uriBuilder.queryParam(AGENT_ID, getConfig().getAgentId());
-    uriBuilder.queryParam(APPID, getConfig().getClientId());
+    uriBuilder.queryParam(APPID, getConfig().getCorpId());
     uriBuilder.replaceQueryParam(OAUTH2_PARAMETER_CLIENT_ID, null);
     uriBuilder.fragment("wechat_redirect");
 
@@ -220,7 +190,7 @@ public class WeWorkIdentityProvider
 
   @Override
   protected String getDefaultScopes() {
-    return DEFAULT_SCOPE;
+    return "snsapi_privateinfo";
   }
 
   @Override
@@ -298,12 +268,6 @@ public class WeWorkIdentityProvider
           }
 
           BrokeredIdentityContext federatedIdentity = provider.getFederatedIdentity(response);
-
-          if (providerConfig.isStoreToken()) {
-            if (federatedIdentity.getToken() == null) {
-              federatedIdentity.setToken(response);
-            }
-          }
 
           federatedIdentity.setIdpConfig(providerConfig);
           federatedIdentity.setIdp(provider);
