@@ -7,7 +7,7 @@
 	</parent>
     <modelVersion>4.0.0</modelVersion>
     <artifactId>keycloak-services-social-wework</artifactId>
-    <name>Keycloak Services Social WeChat Work</name>
+    <name>Keycloak Services Social WeWork</name>
 	<packaging>jar</packaging>
 	<properties>
         <maven.compiler.target>1.8</maven.compiler.target>
